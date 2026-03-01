@@ -595,7 +595,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 		scene.obstacleAngle = parseFloat(val);
 		document.getElementById('angleDisplay').textContent = val;
 		updateObstaclePolygon();
-		if (scene.showObstacle) {
+		if (scene.showObstacle && !_sliderDragging) {
 			scheduleObstacleUpdate();
 		}
 	}
@@ -603,7 +603,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 	function changeChord(val) {
 		scene.obstacleChord = parseFloat(val) / 100.0;
 		updateObstaclePolygon();
-		if (scene.showObstacle) {
+		if (scene.showObstacle && !_sliderDragging) {
 			scheduleObstacleUpdate();
 		}
 	}
@@ -1121,11 +1121,28 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 		scene.paused = !scene.paused;
 	}
 
+	// Pause simulation while sliders are being dragged to keep UI responsive
+	var _sliderDragging = false;
+	var angleSlider = document.getElementById('angleSlider');
+	var chordSlider = document.getElementById('chordSlider');
+
+	function onSliderDown() { _sliderDragging = true; }
+	function onSliderUp() {
+		if (_sliderDragging) {
+			_sliderDragging = false;
+			if (scene.showObstacle) setObstacle(scene.obstacleX, scene.obstacleY, true);
+		}
+	}
+
+	angleSlider.addEventListener('pointerdown', onSliderDown);
+	chordSlider.addEventListener('pointerdown', onSliderDown);
+	document.addEventListener('pointerup', onSliderUp);
+
 	// main -------------------------------------------------------
 
 	function simulate()
 	{
-		if (!scene.paused)
+		if (!scene.paused && !_sliderDragging)
 			scene.fluid.simulate(scene.dt, scene.gravity, scene.numIters)
 			scene.frameNr++;
 	}
