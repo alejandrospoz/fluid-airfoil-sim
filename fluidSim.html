@@ -189,45 +189,45 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 	}
 
 	function generateKFM(type, numPoints) {
-		// KFM airfoils: flat bottom with a step
-		// type 2: step at ~50% chord, step height ~6% chord
-		// type 3: step at ~65% chord, step height ~6% chord
+		// KFM airfoils: flat bottom, stepped upper surface
+		// type 2: step at ~50% chord
+		// type 3: step at ~65% chord
 		var N = numPoints || 80;
 		var thickness = 0.08;
 		var stepPos = (type === 2) ? 0.50 : 0.65;
-		var stepHeight = thickness * 0.75;
+		var stepHeight = thickness * 0.6;
 		var points = [];
 
-		// Upper surface: simple curved top (trailing edge to leading edge)
-		for (var i = N; i >= 0; i--) {
-			var x = 0.5 * (1.0 - Math.cos(Math.PI * i / N));
-			// Parabolic upper surface
-			var y = thickness * 4.0 * x * (1.0 - x);
-			// Sharpen trailing edge
+		function baseCurve(x) {
+			if (x <= 0 || x >= 1) return 0;
+			var y = 4.0 * x * (1.0 - x);
 			y *= Math.pow(Math.sin(Math.PI * x), 0.15);
-			points.push({x: x, y: y});
+			return y;
 		}
 
-		// Lower surface with step (leading edge to trailing edge)
-		// From leading edge to step position: flat bottom
-		var stepsN = Math.floor(N * stepPos);
-		for (var i = 1; i <= stepsN; i++) {
-			var x = stepPos * i / stepsN;
+		// Upper surface: trailing edge (x=1) to leading edge (x=0)
+		// Rear section: TE to step position (base height)
+		var rearN = Math.max(2, Math.round(N * (1.0 - stepPos)));
+		for (var i = rearN; i >= 0; i--) {
+			var x = stepPos + (1.0 - stepPos) * i / rearN;
+			points.push({x: x, y: thickness * baseCurve(x)});
+		}
+
+		// Step up at stepPos
+		points.push({x: stepPos, y: thickness * baseCurve(stepPos) + stepHeight});
+
+		// Front section: step to LE (elevated by stepHeight)
+		var frontN = Math.max(2, Math.round(N * stepPos));
+		for (var i = frontN - 1; i >= 0; i--) {
+			var x = stepPos * i / frontN;
+			points.push({x: x, y: thickness * baseCurve(x) + stepHeight});
+		}
+
+		// Lower surface: flat from LE (x=0) to TE (x=1)
+		for (var i = 0; i <= N; i++) {
+			var x = i / N;
 			points.push({x: x, y: 0.0});
 		}
-
-		// Step down
-		points.push({x: stepPos, y: -stepHeight});
-
-		// From step to trailing edge: flat at step depth
-		var remainN = N - stepsN;
-		for (var i = 1; i <= remainN; i++) {
-			var x = stepPos + (1.0 - stepPos) * i / remainN;
-			points.push({x: x, y: -stepHeight});
-		}
-
-		// Close back up to trailing edge
-		points.push({x: 1.0, y: 0.0});
 
 		return points;
 	}
@@ -561,12 +561,23 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 	}
 
 	// UI change handlers
+	var _obstacleUpdatePending = false;
+	function scheduleObstacleUpdate() {
+		if (!_obstacleUpdatePending) {
+			_obstacleUpdatePending = true;
+			requestAnimationFrame(function() {
+				setObstacle(scene.obstacleX, scene.obstacleY, true);
+				_obstacleUpdatePending = false;
+			});
+		}
+	}
+
 	function changeObstacleType(type) {
 		scene.obstacleType = type;
 		document.getElementById('nacaInput').disabled = (type !== 'naca');
 		buildObstacleProfile();
 		if (scene.showObstacle) {
-			setObstacle(scene.obstacleX, scene.obstacleY, true);
+			scheduleObstacleUpdate();
 		}
 	}
 
@@ -575,7 +586,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 			scene.nacaDesignation = val;
 			buildObstacleProfile();
 			if (scene.showObstacle) {
-				setObstacle(scene.obstacleX, scene.obstacleY, true);
+				scheduleObstacleUpdate();
 			}
 		}
 	}
@@ -585,7 +596,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 		document.getElementById('angleDisplay').textContent = val;
 		updateObstaclePolygon();
 		if (scene.showObstacle) {
-			setObstacle(scene.obstacleX, scene.obstacleY, true);
+			scheduleObstacleUpdate();
 		}
 	}
 
@@ -593,7 +604,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 		scene.obstacleChord = parseFloat(val) / 100.0;
 		updateObstaclePolygon();
 		if (scene.showObstacle) {
-			setObstacle(scene.obstacleX, scene.obstacleY, true);
+			scheduleObstacleUpdate();
 		}
 	}
 
@@ -606,12 +617,12 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 		scene.dt = 1.0 / 60.0;
 		scene.numIters = 40;
 
-		var res = 100;
+		var res = 200;
 
 		if (sceneNr == 0)
-			res = 50;
+			res = 80;
 		else if (sceneNr == 3)
-			res = 200;
+			res = 300;
 
 		var domainHeight = 1.0;
 		var domainWidth = domainHeight / simHeight * simWidth;
@@ -1089,7 +1100,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 		document.getElementById('angleDisplay').textContent = newAngle;
 		updateObstaclePolygon();
 		if (scene.showObstacle) {
-			setObstacle(scene.obstacleX, scene.obstacleY, true);
+			scheduleObstacleUpdate();
 		}
 	}, { passive: false });
 
