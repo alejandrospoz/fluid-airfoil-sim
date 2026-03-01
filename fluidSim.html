@@ -561,15 +561,16 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 	}
 
 	// UI change handlers
-	var _obstacleUpdatePending = false;
-	function scheduleObstacleUpdate() {
-		if (!_obstacleUpdatePending) {
-			_obstacleUpdatePending = true;
-			requestAnimationFrame(function() {
-				setObstacle(scene.obstacleX, scene.obstacleY, true);
-				_obstacleUpdatePending = false;
-			});
-		}
+	// Slider throttle: pauses simulation while slider is active,
+	// applies obstacle update 150ms after the last slider input.
+	var _sliderTimeout = null;
+
+	function sliderThrottle() {
+		if (_sliderTimeout) clearTimeout(_sliderTimeout);
+		_sliderTimeout = setTimeout(function() {
+			_sliderTimeout = null;
+			if (scene.showObstacle) setObstacle(scene.obstacleX, scene.obstacleY, true);
+		}, 150);
 	}
 
 	function changeObstacleType(type) {
@@ -577,7 +578,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 		document.getElementById('nacaInput').disabled = (type !== 'naca');
 		buildObstacleProfile();
 		if (scene.showObstacle) {
-			scheduleObstacleUpdate();
+			setObstacle(scene.obstacleX, scene.obstacleY, true);
 		}
 	}
 
@@ -586,7 +587,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 			scene.nacaDesignation = val;
 			buildObstacleProfile();
 			if (scene.showObstacle) {
-				scheduleObstacleUpdate();
+				setObstacle(scene.obstacleX, scene.obstacleY, true);
 			}
 		}
 	}
@@ -595,17 +596,13 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 		scene.obstacleAngle = parseFloat(val);
 		document.getElementById('angleDisplay').textContent = val;
 		updateObstaclePolygon();
-		if (scene.showObstacle && !_sliderDragging) {
-			scheduleObstacleUpdate();
-		}
+		if (scene.showObstacle) sliderThrottle();
 	}
 
 	function changeChord(val) {
 		scene.obstacleChord = parseFloat(val) / 100.0;
 		updateObstaclePolygon();
-		if (scene.showObstacle && !_sliderDragging) {
-			scheduleObstacleUpdate();
-		}
+		if (scene.showObstacle) sliderThrottle();
 	}
 
 	function setupScene(sceneNr = 0)
@@ -1099,9 +1096,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 		document.getElementById('angleSlider').value = newAngle;
 		document.getElementById('angleDisplay').textContent = newAngle;
 		updateObstaclePolygon();
-		if (scene.showObstacle) {
-			scheduleObstacleUpdate();
-		}
+		if (scene.showObstacle) sliderThrottle();
 	}, { passive: false });
 
 	document.addEventListener('keydown', event => {
@@ -1121,28 +1116,11 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 		scene.paused = !scene.paused;
 	}
 
-	// Pause simulation while sliders are being dragged to keep UI responsive
-	var _sliderDragging = false;
-	var angleSlider = document.getElementById('angleSlider');
-	var chordSlider = document.getElementById('chordSlider');
-
-	function onSliderDown() { _sliderDragging = true; }
-	function onSliderUp() {
-		if (_sliderDragging) {
-			_sliderDragging = false;
-			if (scene.showObstacle) setObstacle(scene.obstacleX, scene.obstacleY, true);
-		}
-	}
-
-	angleSlider.addEventListener('pointerdown', onSliderDown);
-	chordSlider.addEventListener('pointerdown', onSliderDown);
-	document.addEventListener('pointerup', onSliderUp);
-
 	// main -------------------------------------------------------
 
 	function simulate()
 	{
-		if (!scene.paused && !_sliderDragging)
+		if (!scene.paused && !_sliderTimeout)
 			scene.fluid.simulate(scene.dt, scene.gravity, scene.numIters)
 			scene.frameNr++;
 	}
